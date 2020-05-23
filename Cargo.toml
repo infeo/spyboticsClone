@@ -1,9 +1,19 @@
 [package]
-name = "spyboticsClone"
+name = "spybotics_clone"
 version = "0.1.0"
-authors = ["infeo <armin.schrenk@hotmail.de>"]
+authors = ["infeo <armin.schrenk@hotmail.de>", "maspri"]
 edition = "2018"
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
+rand = "0.7.3"
+amethyst = "0.15.0"
+log = { version = "0.4.8", features = ["serde"] }
+
+[features]
+default = ["vulkan"]
+empty = ["amethyst/empty"]
+metal = ["amethyst/metal"]
+vulkan = ["amethyst/vulkan"]
+#nightly = ["amethyst/nightly"]

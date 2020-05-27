@@ -1,0 +1,3 @@
+[submodule "resource/spybotics-icons"]
+	path = resource/spybotics-icons
+	url = https://github.com/infeo/spybotics-icons

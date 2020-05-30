@@ -114,26 +114,34 @@ impl SimpleState for Spybotics {
                 return Trans::Quit;
             };
 
-            let input = InputHandler::<StringBindings>::new();
-            if let Some(mouse_position) = input.mouse_position() {
-                info!("Mouse position {} {}",mouse_position.0, mouse_position.1);
-            } else {
-                info!("Could not determine mouse position.");
-            }
+                match get_mouse_button(&event) {
 
-            match get_mouse_button(&event) {
 
                 Some((MouseButton::Left, ElementState::Pressed)) => {
-                    self.pause = !self.pause;
-                    info!(
-                        "Animation paused {}",
-                        if self.pause {
-                            "enabled"
+                        // try_fetch returns a Option<Fetch<MyResource>>
+                        let fetched = data.world.try_fetch::<InputHandler<StringBindings>>();
+                        if let Some(fetched_resource) = fetched {
+                            //dereference Fetch<MyResource> to access data
+                            if let Some(mouse_position) = fetched_resource.mouse_position() {
+                                //TODO: do something with the mouse input
+                            } else {
+                                println!("Mouse Position not available.");
+                            }
                         } else {
-                            "paused"
+                            println!("No InputHandler present in `World`");
                         }
-                    );
-                }
+                        /**
+                            self.pause = !self.pause;
+                            info!(
+                                "Animation paused {}",
+                                if self.pause {
+                                    "enabled"
+                                } else {
+                                    "paused"
+                                }
+                            );
+                        **/
+                    }
 
                 _ => {}
             };

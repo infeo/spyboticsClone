@@ -31,6 +31,14 @@ use rand::prelude::*;
 
 mod spriteIds;
 
+//For the meaning of 'static, see https://doc.rust-lang.org/1.9.0/book/lifetimes.html
+static GAME_PATH: &'static str = "D:\\Projekte\\spyboticsClone\\";
+static CONFIG_PATH: &'static str = "resource\\config\\display.ron";
+static ASSET_PATH: &'static str = "resource\\spybotics-icons\\";
+static SPRITE_SHEET_NAME: &'static str = "spritesheet_extended.png";
+static RON_FILE_NAME: &'static str = "spritesheet_extended.ron";
+
+
 #[derive(Debug, Clone)]
 struct LoadedSpriteSheet {
     sprite_sheet_handle: Handle<SpriteSheet>,
@@ -312,7 +320,7 @@ impl Spybotics {
             let loader = world.read_resource::<Loader>();
             let texture_storage = world.read_resource::<AssetStorage<Texture>>();
             loader.load(
-                "texture/programs.png",
+                SPRITE_SHEET_NAME,
                 ImageFormat::default(),
                 (),
                 &texture_storage,
@@ -321,7 +329,7 @@ impl Spybotics {
 
         let loader = world.read_resource::<Loader>();
         loader.load(
-            "texture/programs.ron",
+            RON_FILE_NAME,
             SpriteSheetFormat(texture_handle),
             (),
             &world.read_resource::<AssetStorage<SpriteSheet>>(),
@@ -333,12 +341,12 @@ impl Spybotics {
 fn main() -> amethyst::Result<()> {
     amethyst::start_logger(Default::default());
 
-    let app_root = path::PathBuf::from("/home/mark/Projects/spybotics_clone/");
+    let app_root = path::PathBuf::from(GAME_PATH);
 
-    let display_config_path = app_root.join("config/display.ron");
+    let display_config_path = app_root.join(CONFIG_PATH);
     println!("{:?}",display_config_path.to_str());
 
-    let assets_dir = app_root.join("assets/");
+    let assets_dir = app_root.join(ASSET_PATH);
     println!("{:?}",assets_dir.to_str());
 
     let game_data = GameDataBuilder::default()

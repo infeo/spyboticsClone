@@ -7,7 +7,7 @@
 use amethyst::{
     assets::{AssetStorage, Handle, Loader, ProgressCounter, Directory},
     core::{Hidden, Transform, TransformBundle},
-    ecs::{Entity, Entities, Join, Read,ReadStorage, WriteStorage,World, WorldExt},
+    ecs::{Entity, Entities, Join, Read,ReadStorage, WriteStorage,World, WorldExt, Component, DenseVecStorage},
     input::{InputBundle,InputHandler,StringBindings,get_mouse_button,is_close_requested, ElementState},
     prelude::*,
     renderer::{
@@ -38,6 +38,8 @@ static ASSET_PATH: &'static str = "resource\\spybotics-icons\\";
 static SPRITE_SHEET_NAME: &'static str = "spritesheet_extended.png";
 static RON_FILE_NAME: &'static str = "spritesheet_extended.ron";
 
+static GAMEFIELD_EXTENT: (u32,u32) = (15, 15);
+
 
 #[derive(Debug, Clone)]
 struct LoadedSpriteSheet {
@@ -52,31 +54,40 @@ struct LoadedSpriteSheet {
 struct Program {
 
 }
+
+
 #[derive(Debug,Default)]
-struct GameField {
-   field_columns: u32,
-   field_rows: u32,
+struct GameTilePosition {
+    grid_position: (u32, u32),
+    world_position: (f32, f32),
+    world_extent: (f32, f32)
 }
 
-impl GameField {
-    fn new() -> Self {
-        GameField {
-            field_columns: 10,
-            field_rows: 10
-        }
-    }
+impl Component for GameTilePosition {
+    type Storage = DenseVecStorage<Self>;
 }
+
+
+struct GameTileSpriteStack {
+    sprite_stack: Vec<Entity>
+}
+
+impl Component for GameTileSpriteStack {
+    type Storage = DenseVecStorage<Self>;
+}
+
 
 #[derive(Debug, Default)]
 struct Spybotics {
     /// The camera entity
     camera: Option<Entity>,
-    /// The bat entities.
+    /// The bat entities. TODO: THink about if this can be removed.
     entities: Vec<Entity>,
     /// Whether or not to add the transparent component to the entities
     pause: bool,
 
-    game_field: GameField,
+    /// The game field matrix
+    game_field: Vec<Entity>,
     /// Information about the loaded sprite sheet.
     loaded_sprite_sheet: Option<Handle<SpriteSheet>>,
     /// Z-axis position of the camera.
@@ -105,7 +116,7 @@ impl SimpleState for Spybotics {
         // thread::sleep(one_second);
 
         self.initialise_camera(world);
-        self.draw_field(world);
+        self.initialize_field(world);
     }
 
     fn handle_event(&mut self, data: StateData<'_, GameData<'_,'_>>, event: StateEvent) -> SimpleTrans {
@@ -130,7 +141,7 @@ impl SimpleState for Spybotics {
                         } else {
                             println!("No InputHandler present in `World`");
                         }
-                        /**
+                        /*
                             self.pause = !self.pause;
                             info!(
                                 "Animation paused {}",
@@ -140,7 +151,7 @@ impl SimpleState for Spybotics {
                                     "paused"
                                 }
                             );
-                        **/
+                        */
                     }
 
                 _ => {}
@@ -166,7 +177,7 @@ impl Spybotics {
             camera: None,
             entities: Vec::new(),
             pause: false,
-            game_field: GameField::new(),
+            game_field: Vec::new(),
             loaded_sprite_sheet: None,
             camera_z: 0.0,
             camera_depth_vision: 0.0,
@@ -281,24 +292,28 @@ impl Spybotics {
         }
     }
 
-    fn draw_field(&mut self,world: &mut World){
+    fn initialize_field(&mut self, world: &mut World){
 
-        // Delete any existing entities
+        // Delete any existing entities TODO: do we need this?
         self.entities.drain(..).for_each(|entity| {
             world
                 .delete_entity(entity)
                 .expect("Failed to delete entity.")
         });
 
+        self.game_field = Vec::new();
+
+
         let mut common_transform = Transform::default();
         common_transform.set_translation_x(-350.0 * 0.5);
         common_transform.set_translation_y(-350.0 * 0.5);
 
-        for i in 0..self.game_field.field_rows {
-            for j in 0..self.game_field.field_columns {
+        for i in 0..GAMEFIELD_EXTENT.0 {
+            for j in 0..GAMEFIELD_EXTENT.1 {
 
                 let mut sprite_transform = Transform::default();
-                sprite_transform.set_translation_xyz((i * 32) as f32, (j * 32) as f32, -1.0);
+                let world_pos = ((i * 32) as f32, (j * 32) as f32);
+                sprite_transform.set_translation_xyz(world_pos.0, world_pos.1, -1.0);
 
                 sprite_transform.concat(&common_transform);
 
@@ -312,7 +327,23 @@ impl Spybotics {
                     .with(sprite_render)
                     .with(sprite_transform);
 
-                self.entities.push(entity_builder.build());
+                //self.entities.push(entity_builder.build());
+
+                let sprite_stack = GameTileSpriteStack {
+                    sprite_stack: vec![entity_builder.build()]
+                };
+
+                let position = GameTilePosition{
+                    grid_position: (i,j),
+                    world_position: world_pos.clone(),
+                    world_extent: (32.0,32.0)
+                };
+
+                let gameTileBuilder = world.create_entity()
+                    .with(position)
+                    .with(sprite_stack);
+
+                self.game_field.push(gameTileBuilder.build());
             }
         }
     }

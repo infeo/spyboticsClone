@@ -6,12 +6,17 @@
 
 use amethyst::{
     assets::{AssetStorage, Handle, Loader, ProgressCounter, Directory},
-    core::{Hidden, Transform, TransformBundle},
-    ecs::{Entity, Entities, Join, Read,ReadStorage, WriteStorage,World, WorldExt, Component, DenseVecStorage},
+    core::{Hidden, Transform, TransformBundle,
+        geometry::Plane,
+        math::{Point2,Vector2,Vector3},
+    },
+    ecs::{Entity, Entities, Join, Read,ReadStorage, WriteStorage,World, WorldExt,
+          System, SystemData, Component, DenseVecStorage, ReadExpect},
     input::{InputBundle,InputHandler,StringBindings,get_mouse_button,is_close_requested, ElementState},
     prelude::*,
+    derive::SystemDesc,
     renderer::{
-        camera::Projection,
+        camera::{Projection,ActiveCamera},
         plugins::{RenderFlat2D, RenderToWindow},
         types::DefaultBackend,
         Camera, ImageFormat, RenderingBundle, SpriteRender, SpriteSheet, SpriteSheetFormat, Texture, Transparent,
@@ -32,9 +37,12 @@ use rand::prelude::*;
 mod spriteIds;
 
 //For the meaning of 'static, see https://doc.rust-lang.org/1.9.0/book/lifetimes.html
-static GAME_PATH: &'static str = "D:\\Projekte\\spyboticsClone\\";
-static CONFIG_PATH: &'static str = "resource\\config\\display.ron";
-static ASSET_PATH: &'static str = "resource\\spybotics-icons\\";
+// static GAME_PATH: &'static str = "D:\\Projekte\\spyboticsClone\\";
+static GAME_PATH: &'static str = "/home/mark/Projects/spybotics_clone";
+// static CONFIG_PATH: &'static str = "resource\\config\\display.ron";
+static CONFIG_PATH: &'static str = "resource/config/display.ron";
+// static ASSET_PATH: &'static str = "resource\\spybotics-icons\\";
+static ASSET_PATH: &'static str = "resource/spybotics-icons/";
 static SPRITE_SHEET_NAME: &'static str = "spritesheet_extended.png";
 static RON_FILE_NAME: &'static str = "spritesheet_extended.ron";
 
@@ -55,7 +63,6 @@ struct Program {
 
 }
 
-
 #[derive(Debug,Default)]
 struct GameTilePosition {
     grid_position: (u32, u32),
@@ -63,11 +70,29 @@ struct GameTilePosition {
     world_extent: (f32, f32)
 }
 
+impl GameTilePosition {
+    fn is_inside(&self,world_coordinates:(f32, f32)) -> bool{
+        let (left,right,top,bottom) = {
+           (
+           self.world_position.0 - 0.5*self.world_extent.0,
+           self.world_position.0 + 0.5*self.world_extent.0,
+           self.world_position.1 + 0.5*self.world_extent.1,
+           self.world_position.1 - 0.5*self.world_extent.1,
+           )
+        };
+
+        world_coordinates.0 > left &&
+            world_coordinates.0 < right &&
+            world_coordinates.1 > bottom &&
+            world_coordinates.1 < top
+    }
+}
+
 impl Component for GameTilePosition {
     type Storage = DenseVecStorage<Self>;
 }
 
-
+#[derive(Debug, Default)]
 struct GameTileSpriteStack {
     sprite_stack: Vec<Entity>
 }
@@ -76,12 +101,35 @@ impl Component for GameTileSpriteStack {
     type Storage = DenseVecStorage<Self>;
 }
 
+#[derive(Debug, Default)]
+struct Walkable {
+    walkable: bool,
+}
+
+impl Walkable {
+
+    fn new(_walkable: bool) -> Self {
+        Walkable {
+            walkable: _walkable,
+        }
+    }
+
+}
+
+impl Component for Walkable {
+    type Storage = DenseVecStorage<Self>;
+}
+
+#[derive(Default,Clone)]
+struct HandleHandle {
+    sprite_sheet_handle: Option<Handle<SpriteSheet>>,
+}
 
 #[derive(Debug, Default)]
 struct Spybotics {
     /// The camera entity
     camera: Option<Entity>,
-    /// The bat entities. TODO: THink about if this can be removed.
+    /// The bat entities. TODO: Think about if this can be removed.
     entities: Vec<Entity>,
     /// Whether or not to add the transparent component to the entities
     pause: bool,
@@ -108,6 +156,8 @@ struct Spybotics {
 impl SimpleState for Spybotics {
     fn on_start(&mut self, data: StateData<'_, GameData<'_, '_>>) {
         let StateData { world, .. } = data;
+
+        world.insert(DenseVecStorage::<GameTilePosition>::default());
 
         self.loaded_sprite_sheet = Some(self.load_sprite_sheet(world));
 
@@ -303,10 +353,13 @@ impl Spybotics {
 
         self.game_field = Vec::new();
 
-
         let mut common_transform = Transform::default();
         common_transform.set_translation_x(-350.0 * 0.5);
         common_transform.set_translation_y(-350.0 * 0.5);
+
+        world.insert(HandleHandle{
+            sprite_sheet_handle: Some(self.loaded_sprite_sheet.as_ref().unwrap().clone()),
+        });
 
         for i in 0..GAMEFIELD_EXTENT.0 {
             for j in 0..GAMEFIELD_EXTENT.1 {
@@ -322,7 +375,8 @@ impl Spybotics {
                     sprite_number: spriteIds::UPLOADZONE,
                 };
 
-                let entity_builder = world
+
+                let sprite_entity_builder = world
                     .create_entity()
                     .with(sprite_render)
                     .with(sprite_transform);
@@ -330,7 +384,7 @@ impl Spybotics {
                 //self.entities.push(entity_builder.build());
 
                 let sprite_stack = GameTileSpriteStack {
-                    sprite_stack: vec![entity_builder.build()]
+                    sprite_stack: vec![sprite_entity_builder.build()]
                 };
 
                 let position = GameTilePosition{
@@ -339,11 +393,13 @@ impl Spybotics {
                     world_extent: (32.0,32.0)
                 };
 
-                let gameTileBuilder = world.create_entity()
+                let game_tile_builder = world.create_entity()
                     .with(position)
-                    .with(sprite_stack);
+                    .with(sprite_stack)
+                    .with( Walkable::new(true));
 
-                self.game_field.push(gameTileBuilder.build());
+
+                self.game_field.push(game_tile_builder.build());
             }
         }
     }
@@ -376,6 +432,89 @@ impl Spybotics {
     }
 }
 
+#[derive(SystemDesc)]
+struct MainSystem {
+
+}
+
+impl<'a> System<'a> for MainSystem {
+
+    type SystemData = (
+        Entities<'a>,
+        ReadStorage<'a, Camera>,
+        Read<'a, InputHandler<StringBindings>>,
+        Read<'a, ActiveCamera>,
+        Read<'a,HandleHandle>,
+        ReadExpect<'a, ScreenDimensions>,
+        WriteStorage<'a,SpriteRender>,
+        WriteStorage<'a,Transform>,
+        WriteStorage<'a, GameTilePosition>,
+        WriteStorage<'a, GameTileSpriteStack>,
+        WriteStorage<'a, Walkable>,
+    );
+
+    fn run(&mut self, ( entities,
+                        cameras,
+                        input,
+                        active_camera,
+                        sprite_sheet_handle,
+                        screen_dimensions,
+                        mut sprites,
+                        mut transforms,
+                        mut game_tile_position,
+                        mut game_tile_sprite_stack,
+                        mut walkable,
+                        ): Self::SystemData){
+
+        // Get the mouse position if its available
+        if let Some(mouse_position) = input.mouse_position() {
+            // Get the active camera if it is spawned and ready
+            let mut camera_join = (&cameras, &transforms).join();
+            if let Some((camera, camera_transform)) = active_camera
+                .entity
+                .and_then(|a| camera_join.get(a, &entities))
+                .or_else(|| camera_join.next())
+            {
+                // Project a ray from the camera to the 0z axis
+                let ray = camera.projection().screen_ray(
+                    Point2::new(mouse_position.0, mouse_position.1),
+                    Vector2::new(screen_dimensions.width(), screen_dimensions.height()),
+                    camera_transform,
+                );
+                let distance = ray.intersect_plane(&Plane::with_z(0.0)).unwrap();
+                let mouse_world_position = ray.at_distance(distance);
+
+                // Find any sprites which the mouse is currently inside
+                for (e, tile_position, tile_stack) in (&*entities, &game_tile_position, &mut game_tile_sprite_stack).join() {
+
+                    if tile_position.is_inside((mouse_world_position.x,mouse_world_position.y)){
+
+                        let mut common_transform = Transform::default();
+                        common_transform.set_translation_x(-350.0 * 0.5);
+                        common_transform.set_translation_y(-350.0 * 0.5);
+
+                        let mut sprite_transform = Transform::default();
+                        sprite_transform.set_translation_xyz(tile_position.world_position.0, tile_position.world_position.1, 0.0);
+
+                        sprite_transform.concat(&common_transform);
+
+                        let sprite_render = SpriteRender {
+                            sprite_sheet: sprite_sheet_handle.sprite_sheet_handle.as_ref().unwrap().clone(),
+                            sprite_number: spriteIds::SELECTSQUAREGREEN,
+                        };
+
+                        let sprite_entity_builder = entities
+                            .build_entity()
+                            .with(sprite_render,&mut sprites)
+                            .with(sprite_transform,&mut transforms);
+
+                       tile_stack.sprite_stack.push(sprite_entity_builder.build());
+                    }
+                }
+            }
+        }
+    }
+}
 
 fn main() -> amethyst::Result<()> {
     amethyst::start_logger(Default::default());
@@ -398,7 +537,8 @@ fn main() -> amethyst::Result<()> {
                         .with_clear([0.34, 0.36, 0.52, 1.0]),
                 )
                 .with_plugin(RenderFlat2D::default()),
-        )?;
+        )?
+        .with(MainSystem{},"MainSystem", &["input_system"]);
 
     let mut game = Application::new(assets_dir, Spybotics::new(), game_data)?;
     game.run();

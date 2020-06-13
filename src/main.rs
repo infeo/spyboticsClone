@@ -8,11 +8,11 @@ use amethyst::{
     assets::{AssetStorage, Handle, Loader, ProgressCounter, Directory},
     core::{Hidden, Transform, TransformBundle,
         geometry::Plane,
-        math::{Point2,Vector2,Vector3},
+        math::{Point2,Point3,Vector2,Vector3},
     },
     ecs::{Entity, Entities, Join, Read,ReadStorage, WriteStorage,World, WorldExt,
           System, SystemData, Component, DenseVecStorage, ReadExpect},
-    input::{InputBundle,InputHandler,StringBindings,get_mouse_button,is_close_requested, ElementState},
+    input::{InputBundle,InputHandler,StringBindings,get_mouse_button,is_close_requested, ElementState, Button},
     prelude::*,
     derive::SystemDesc,
     renderer::{
@@ -66,6 +66,10 @@ struct Program {
 
 }
 
+/// Component to carry information about the position about a game tile
+/// Grid position contains the coordinates in the game field grid
+/// world position contains the coordinates of the lower left corner of the tile on the world
+/// world extent gives the size in y and x direction of the tile
 #[derive(Debug,Default)]
 struct GameTilePosition {
     grid_position: (u32, u32),
@@ -76,14 +80,13 @@ struct GameTilePosition {
 impl GameTilePosition {
     fn is_inside(&self,world_coordinates:(f32, f32)) -> bool{
         let (left,right,top,bottom) = {
-           (
-           self.world_position.0 - 0.5*self.world_extent.0,
-           self.world_position.0 + 0.5*self.world_extent.0,
-           self.world_position.1 + 0.5*self.world_extent.1,
-           self.world_position.1 - 0.5*self.world_extent.1,
-           )
+            (
+                self.world_position.0,
+                self.world_position.0 + self.world_extent.0,
+                self.world_position.1 + self.world_extent.1,
+                self.world_position.1,
+            )
         };
-
         world_coordinates.0 > left &&
             world_coordinates.0 < right &&
             world_coordinates.1 > bottom &&
@@ -470,48 +473,56 @@ impl<'a> System<'a> for MainSystem {
                         ): Self::SystemData){
 
         // Get the mouse position if its available
-        if let Some(mouse_position) = input.mouse_position() {
-            // Get the active camera if it is spawned and ready
-            let mut camera_join = (&cameras, &transforms).join();
-            if let Some((camera, camera_transform)) = active_camera
-                .entity
-                .and_then(|a| camera_join.get(a, &entities))
-                .or_else(|| camera_join.next())
-            {
-                // Project a ray from the camera to the 0z axis
-                let ray = camera.projection().screen_ray(
-                    Point2::new(mouse_position.0, mouse_position.1),
-                    Vector2::new(screen_dimensions.width(), screen_dimensions.height()),
-                    camera_transform,
-                );
-                let distance = ray.intersect_plane(&Plane::with_z(0.0)).unwrap();
-                let mouse_world_position = ray.at_distance(distance);
+        if input.button_is_down(Button::Mouse(MouseButton::Left)) {
+            if let Some(mouse_position) = input.mouse_position() {
+                // Get the active camera if it is spawned and ready
+                let mut camera_join = (&cameras, &transforms).join();
+                if let Some((camera, camera_transform)) = active_camera
+                    .entity
+                    .and_then(|a| camera_join.get(a, &entities))
+                    .or_else(|| camera_join.next())
+                {
+                    // creates a point with the screen coordinates of the mouse pointer
+                    let mouse_coordinate = Some(Point3::new(
+                        mouse_position.0,
+                        mouse_position.1,
+                        camera_transform.translation().z,
+                    ));
+                    let screen_dimensions_vector =
+                        Vector2::new(screen_dimensions.width(), screen_dimensions.height());
+                    // creates a point with the _world_ coordinates of the mouse pointer
+                    let mut world_coordinate = camera.projection().screen_to_world_point(
+                        mouse_coordinate.expect("Dafuq!"),
+                        screen_dimensions_vector,
+                        camera_transform,
+                    );
 
-                // Find any sprites which the mouse is currently inside
-                for (e, tile_position, tile_stack) in (&*entities, &game_tile_position, &mut game_tile_sprite_stack).join() {
+                    // Find any sprites which the mouse is currently inside
+                    for (e, tile_position, tile_stack) in (&*entities, &game_tile_position, &mut game_tile_sprite_stack).join() {
 
-                    if tile_position.is_inside((mouse_world_position.x,mouse_world_position.y)){
+                        if tile_position.is_inside((world_coordinate.x,world_coordinate.y)){
+                            let mut common_transform = Transform::default();
+                            //TODO: DO NOT USE HARDCODED OFFSET
+                            common_transform.set_translation_x(16.0);
+                            common_transform.set_translation_y(16.0);
 
-                        let mut common_transform = Transform::default();
-                        common_transform.set_translation_x(-350.0 * 0.5);
-                        common_transform.set_translation_y(-350.0 * 0.5);
+                            let mut sprite_transform = Transform::default();
+                            sprite_transform.set_translation_xyz(tile_position.world_position.0, tile_position.world_position.1, 0.0);
 
-                        let mut sprite_transform = Transform::default();
-                        sprite_transform.set_translation_xyz(tile_position.world_position.0, tile_position.world_position.1, 0.0);
+                            sprite_transform.concat(&common_transform);
 
-                        sprite_transform.concat(&common_transform);
+                            let sprite_render = SpriteRender {
+                                sprite_sheet: sprite_sheet_handle.sprite_sheet_handle.as_ref().unwrap().clone(),
+                                sprite_number: spriteIds::SELECTSQUAREGREEN,
+                            };
 
-                        let sprite_render = SpriteRender {
-                            sprite_sheet: sprite_sheet_handle.sprite_sheet_handle.as_ref().unwrap().clone(),
-                            sprite_number: spriteIds::SELECTSQUAREGREEN,
-                        };
+                            let sprite_entity_builder = entities
+                                .build_entity()
+                                .with(sprite_render,&mut sprites)
+                                .with(sprite_transform,&mut transforms);
 
-                        let sprite_entity_builder = entities
-                            .build_entity()
-                            .with(sprite_render,&mut sprites)
-                            .with(sprite_transform,&mut transforms);
-
-                       tile_stack.sprite_stack.push(sprite_entity_builder.build());
+                           tile_stack.sprite_stack.push(sprite_entity_builder.build());
+                        }
                     }
                 }
             }

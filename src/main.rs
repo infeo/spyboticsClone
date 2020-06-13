@@ -46,7 +46,10 @@ static ASSET_PATH: &'static str = "resource/spybotics-icons/";
 static SPRITE_SHEET_NAME: &'static str = "spritesheet_extended.png";
 static RON_FILE_NAME: &'static str = "spritesheet_extended.ron";
 
-static GAMEFIELD_EXTENT: (u32,u32) = (15, 15);
+const  GAMEFIELD_EXTENT: (u32,u32) = (15, 15);
+
+const ARENA_HEIGHT: f32 = (32*GAMEFIELD_EXTENT.0) as f32;
+const ARENA_WIDTH: f32 = (32*GAMEFIELD_EXTENT.1) as f32;
 
 
 #[derive(Debug, Clone)]
@@ -248,30 +251,28 @@ impl Spybotics {
                 .delete_entity(camera)
                 .expect("Failed to delete camera entity.");
         }
+        /*
+        Nice to have, but right now we'll fix the game field to a certain size
 
         let (width, height) = {
             let dim = world.read_resource::<ScreenDimensions>();
             (dim.width(), dim.height())
         };
+        */
+
+        let (width, height) = (ARENA_WIDTH, ARENA_HEIGHT);
 
         let mut camera_transform = Transform::default();
-        // camera_transform.set_translation_xyz((width as f32) * 0.5, (height as f32) * 0.5, self.camera_z);
-        camera_transform.set_translation_xyz(0.0,0.0, self.camera_z);
+        camera_transform.set_translation_xyz((width as f32) * 0.5, (height as f32) * 0.5, self.camera_z);
+        //camera_transform.set_translation_xyz(0.0,0.0, self.camera_z);
 
         let camera = world
             .create_entity()
+            .with(Camera::standard_2d(width, height))
             .with(camera_transform)
             // Define the view that the camera can see. It makes sense to keep the `near` value as
             // 0.0, as this means it starts seeing anything that is 0 units in front of it. The
             // `far` value is the distance the camera can see facing the origin.
-            .with(Camera::from(Projection::orthographic(
-                -width / 2.0,
-                width / 2.0,
-                -height / 2.0,
-                height / 2.0,
-                0.0,
-                self.camera_depth_vision,
-            )))
             .build();
 
         self.camera = Some(camera);
@@ -353,9 +354,11 @@ impl Spybotics {
 
         self.game_field = Vec::new();
 
+        let (sprite_offset_w, sprite_offset_h) = (16.0,16.0); //TODO: rather than hardcoding, we should load this from the spritesheet itself
         let mut common_transform = Transform::default();
-        common_transform.set_translation_x(-350.0 * 0.5);
-        common_transform.set_translation_y(-350.0 * 0.5);
+        common_transform.set_translation_x(sprite_offset_w);
+        common_transform.set_translation_y(sprite_offset_h);
+
 
         world.insert(HandleHandle{
             sprite_sheet_handle: Some(self.loaded_sprite_sheet.as_ref().unwrap().clone()),

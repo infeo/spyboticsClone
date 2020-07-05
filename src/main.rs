@@ -21,9 +21,11 @@ use amethyst::{
         types::DefaultBackend,
         Camera, ImageFormat, RenderingBundle, SpriteRender, SpriteSheet, SpriteSheetFormat, Texture, Transparent,
     },
+    utils::{application_dir,application_root_dir},
     window::ScreenDimensions,
     winit::VirtualKeyCode,
     winit::MouseButton,
+
 };
 
 use log::info;
@@ -47,7 +49,6 @@ static SPRITE_SHEET_NAME: &'static str = "spritesheet_extended.png";
 static RON_FILE_NAME: &'static str = "spritesheet_extended.ron";
 
 const  GAMEFIELD_EXTENT: (u32,u32) = (15, 15);
-
 const ARENA_HEIGHT: f32 = (32*GAMEFIELD_EXTENT.0) as f32;
 const ARENA_WIDTH: f32 = (32*GAMEFIELD_EXTENT.1) as f32;
 
@@ -533,7 +534,8 @@ impl<'a> System<'a> for MainSystem {
 fn main() -> amethyst::Result<()> {
     amethyst::start_logger(Default::default());
 
-    let app_root = path::PathBuf::from(GAME_PATH);
+    let app_root = path::PathBuf::from(env::var_os("CARGO_MANIFEST_DIR")
+        .expect("Could not find CARGO_MANIFEST_DIR env variable, pointing to cargo manifest"));
 
     let display_config_path = app_root.join(CONFIG_PATH);
     println!("{:?}",display_config_path.to_str());

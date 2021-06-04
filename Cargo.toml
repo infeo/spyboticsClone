@@ -9,9 +9,10 @@ edition = "2018"
 [dependencies]
 rand = "0.7.3"
 serde = "1.0.114"
-amethyst = "0.15.0"
+amethyst = { git = "https://github.com/amethyst/amethyst.git", branch = "main" }
 log = { version = "0.4.8", features = ["serde"] }
-amethyst_config = "0.14.0"
+inventory = "0.1.10"
+#amethyst_config = "0.14.0"
 
 [features]
 default = ["vulkan"]

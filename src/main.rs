@@ -5,7 +5,7 @@
 
 
 use amethyst::{
-    assets::{AssetStorage, Handle, Loader, ProgressCounter, Directory},
+    assets::{AssetStorage, Handle, Loader, LoaderBundle, ProgressCounter, Directory},
     core::{Hidden, Transform,
         geometry::Plane,
         math::{Point2,Point3,Vector2,Vector3},
@@ -530,6 +530,7 @@ fn main() -> amethyst::Result<()> {
 
     let mut dispatcher = DispatcherBuilder::default();
     dispatcher.add_bundle(TransformBundle);
+    dispatcher.add_bundle(LoaderBundle);
 
     dispatcher.add_bundle(InputBundle::new().with_bindings_from_file(config_dir.join("input.ron"))?);
     dispatcher.add_bundle(

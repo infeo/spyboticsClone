@@ -4,38 +4,38 @@
 //! layering and blending.
 
 
-use amethyst::{
-    assets::{AssetStorage, Handle, Loader, LoaderBundle, ProgressCounter, Directory},
-    core::{Hidden, Transform,
-        geometry::Plane,
-        math::{Point2,Point3,Vector2,Vector3},
-    },
-    core::transform::TransformBundle,
-    ecs::{ Entity, World, System },
-    input::{InputBundle,InputHandler,get_mouse_button, is_close_requested, ElementState, Button, VirtualKeyCode},
-    prelude::*,
-    renderer::{
-        camera::{ActiveCamera},
-        plugins::{RenderFlat2D, RenderToWindow},
-        types::DefaultBackend,
-        Camera, ImageFormat, RenderingBundle, SpriteRender, SpriteSheet, Texture, Transparent,
-    },
-    utils::{application_dir,application_root_dir},
-    window::ScreenDimensions,
-
-};
-
-use log::info;
 use std::{env, io, path};
 use std::{thread, time};
 use std::borrow::Borrow;
 use std::ops::Deref;
 use std::path::PathBuf;
-use rand::prelude::*;
+
+use amethyst::{
+    assets::{AssetStorage, Directory, Handle, Loader, ProgressCounter},
+    core::{geometry::Plane, Hidden,
+           math::{Point2, Point3, Vector2, Vector3},
+           Transform,
+    },
+    core::transform::TransformBundle,
+    ecs::{Entity, System, World},
+    input::{Button, ElementState, get_mouse_button, InputBundle, InputHandler, is_close_requested, VirtualKeyCode},
+    prelude::*,
+    renderer::{
+        Camera,
+        camera::ActiveCamera,
+        ImageFormat,
+        plugins::{RenderFlat2D, RenderToWindow}, RenderingBundle, SpriteRender, SpriteSheet, Texture, Transparent, types::DefaultBackend,
+    },
+    utils::{application_dir, application_root_dir},
+    window::ScreenDimensions,
+
+};
+use amethyst::assets::{DefaultLoader, LoaderBundle, ProcessingQueue};
 use amethyst::input::is_key_down;
-use amethyst::assets::{DefaultLoader, ProcessingQueue};
-use amethyst::renderer::sprite::Sprites;
 use amethyst::renderer::rendy::core::hal::command::ClearColor;
+use amethyst::renderer::sprite::Sprites;
+use log::info;
+use rand::prelude::*;
 
 mod spriteIds;
 
@@ -158,6 +158,7 @@ impl SimpleState for Spybotics {
         // thread::sleep(one_second);
 
         self.initialise_camera(world);
+        self.adjust_camera(world,resources);
         self.initialize_field(world, resources);
     }
 
@@ -200,126 +201,42 @@ impl Spybotics {
         self.camera_z = 1.0;
         self.camera_depth_vision = 5.0;
 
-        self.adjust_camera(world);
     }
 
-    fn adjust_camera(&mut self, world: &mut World) {
+    fn adjust_camera(&mut self, world: &mut World, resources: &Resources) {
 
         let (width, height) = (ARENA_WIDTH, ARENA_HEIGHT);
 
-        // if let Some(camera) = self.camera.take() {
-            // world
-                // .remove(camera)
-                // .expect("Failed to delete camera entity.");
-        // }
+        if let Some(camera) = self.camera.take() {
+            world.remove(camera);
+        }
 
-        self.camera = self.camera.and_then(|camera_entity|{
+        //for some reason the camera transform is not used immediately but only after the first some
+        //something is clicked
+        let mut camera_transform = Transform::default();
+        camera_transform.set_translation_xyz((width as f32) * 0.5, (height as f32) * 0.5, self.camera_z);
+        // camera_transform.set_translation_xyz(10000000000.0,100000000000.0, self.camera_z);
 
-            world.entry(camera_entity).map(|mut entry|{
-
-                entry.get_component_mut::<Transform>().map(|camera_transform|{
-                    camera_transform.set_translation_xyz((width as f32) * 0.5, (height as f32) * 0.5, self.camera_z);
-                });
-
-                entry.remove_component::<Camera>();
-                entry.add_component( Camera::standard_2d(width,height) );
-
-                camera_entity
-
-            })
-
-        });
-
-        /*
-        Nice to have, but right now we'll fix the game field to a certain size
-
-        let (width, height) = {
-            let dim = world.read_resource::<ScreenDimensions>();
-            (dim.width(), dim.height())
-        };
-        */
-
-
-        // let mut camera_transform = Transform::default();
-        // camera_transform.set_translation_xyz((width as f32) * 0.5, (height as f32) * 0.5, self.camera_z);
-        //camera_transform.set_translation_xyz(0.0,0.0, self.camera_z);
-
-        // let camera = world
-        //     .create_entity()
-        //     .with(Camera::standard_2d(width, height))
-        //     .with(camera_transform)
+        let camera = world.push((
+            camera_transform,
             // Define the view that the camera can see. It makes sense to keep the `near` value as
             // 0.0, as this means it starts seeing anything that is 0 units in front of it. The
             // `far` value is the distance the camera can see facing the origin.
-            // .build();
+            Camera::orthographic(
+                -width / 2.0,
+                width / 2.0,
+                -height / 2.0,
+                height / 2.0,
+                0.0,
+                self.camera_depth_vision,
+            ),
+        ));
 
-        // self.camera = Some(camera);
+
+        self.camera = Some(camera);
+
+
     }
-
-    // fn redraw_sprites(&mut self, world: &mut World) {
-    //     let &SpriteSheet {
-    //         sprites,
-    //         ..
-    //     } = self
-    //         .loaded_sprite_sheet
-    //         .as_ref()
-    //         .expect("Expected sprite sheet to be loaded.");
-    //
-    //
-    //     // Delete any existing entities
-    //     self.entities.drain(..).for_each(|entity| {
-    //         world
-    //             .delete_entity(entity)
-    //             .expect("Failed to delete entity.")
-    //     });
-    //
-    //     self.draw_sprites(world);
-    // }
-
-    // fn draw_sprites(&mut self, world: &mut World) {
-    //     // let sprite_count = {
-    //     //     let asset_storage = world.read_resource::<AssetStorage<SpriteSheet>>();
-    //     //     asset_storage
-    //     //         .get(self.loaded_sprite_sheet.as_ref().unwrap())
-    //     //         .expect("Why is this so complicated????")
-    //     //         .sprites.len()
-    //     // };
-    //
-    //     // Delete any existing entities
-    //     self.entities.drain(..).for_each(|entity| {
-    //         world
-    //             .delete_entity(entity)
-    //             .expect("Failed to delete entity.")
-    //     });
-    //
-    //     let mut common_transform = Transform::default();
-    //     common_transform.set_translation_x(-350.0 * 0.5);
-    //     common_transform.set_translation_y(-350.0 * 0.5);
-    //
-    //     let cols = 10;
-    //     // Create an entity per sprite.
-    //     for i in 0..144 {
-    //
-    //         let mut sprite_transform = Transform::default();
-    //         let mut random_gen = rand::thread_rng();
-    //         // sprite_transform.set_translation_xyz((i % cols * 32) as f32, ((i / cols * 32) as f32), -1.0);
-    //         sprite_transform.set_translation_xyz(random_gen.gen_range(100.0,500.0),random_gen.gen_range(100.0,500.0), -1.0);
-    //
-    //         sprite_transform.concat(&common_transform);
-    //
-    //         let sprite_render = SpriteRender {
-    //             sprite_sheet: self.loaded_sprite_sheet.as_ref().unwrap().clone(),
-    //             sprite_number: i,
-    //         };
-    //
-    //         let entity_builder = world
-    //             .create_entity()
-    //             .with(sprite_render)
-    //             .with(sprite_transform);
-    //
-    //         self.entities.push(entity_builder.build());
-    //     }
-    // }
 
     fn initialize_field(&mut self, world: &mut World, resources: &mut Resources){
 
@@ -406,21 +323,7 @@ struct MainSystem {
 
 impl System for MainSystem {
 
-    // type SystemData = (
-    //     Entities<'a>,
-    //     ReadStorage<'a, Camera>,
-    //     Read<'a, InputHandler<StringBindings>>,
-    //     Read<'a, ActiveCamera>,
-    //     Read<'a,HandleHandle>,
-    //     ReadExpect<'a, ScreenDimensions>,
-    //     WriteStorage<'a,SpriteRender>,
-    //     WriteStorage<'a,Transform>,
-    //     WriteStorage<'a, GameTilePosition>,
-    //     WriteStorage<'a, GameTileSpriteStack>,
-    //     WriteStorage<'a, Walkable>,
-    // );
-
-    fn build(mut self) -> Box<dyn ParallelRunnable>{
+    fn build(mut self) -> Box<dyn ParallelRunnable> {
         Box::new(
             SystemBuilder::new("MainSystem")
                 .read_resource::<InputHandler>()
@@ -443,27 +346,21 @@ impl System for MainSystem {
                         if input.action_is_down("select").unwrap() {
                             if let Some(mouse_position) = input.mouse_position() {
                                 // Get the active camera if it is spawned and ready
-                                if let Some((camera, camera_transform)) = active_camera
+                                let camera_tup = active_camera
                                     .entity
                                     .as_ref()
-                                    .and_then( |active_camera| {
-                                            let mut is_ok = true;
-                                            {
-                                                let camera_entry = camera_query.get_mut(world, *active_camera);
-                                                is_ok = camera_entry.is_ok();
-                                            }
-                                            if is_ok {
-                                                camera_query.get_mut(world, *active_camera).ok()
-                                            } else {
-                                                Some(camera_query.iter_mut(world).next().unwrap())
-                                            }
-                                            // let camera_entry = match camera_entry {
-                                            //     Ok(e) => Some(e),
-                                            //     Err(_) => Some(camera_query.iter_mut(world).next().unwrap())
-                                            // };
-                                            // camera_entry
+                                    .and_then(|active_camera| {
+                                        camera_query.get_mut(world, *active_camera).ok()
                                     })
-                                {
+                                    .or(None);
+
+                                // Return active camera or fetch first available
+                                let camera_tup= match camera_tup {
+                                    Some(e) => Some(e),
+                                    None => camera_query.iter_mut(world).next(),
+                                };
+
+                                if let Some((camera,camera_transform)) = camera_tup {
                                     // creates a point with the screen coordinates of the mouse pointer
                                     let mouse_coordinate = Some(Point3::new(
                                         mouse_position.0,
@@ -498,8 +395,6 @@ impl System for MainSystem {
                                                 sprite_number: spriteIds::SELECTSQUAREGREEN,
                                             };
 
-
-
                                             let sprite_entity = commands.push((sprite_render, sprite_transform));
 
                                             tile_stack.sprite_stack.push(sprite_entity);
@@ -526,7 +421,7 @@ fn main() -> amethyst::Result<()> {
     println!("{:?}",assets_dir.to_str());
 
     let config_dir = app_root.join(CONFIG_PATH);
-    println!("{:?}",assets_dir.to_str());
+    println!("{:?}",config_dir.to_str());
 
     let mut dispatcher = DispatcherBuilder::default();
     dispatcher.add_bundle(TransformBundle);
@@ -541,10 +436,9 @@ fn main() -> amethyst::Result<()> {
             )
             .with_plugin(RenderFlat2D::default()),
     );
-    // .with(MainSystem{},"MainSystem", &["input_system"]);
+    dispatcher.add_system(MainSystem{});
 
     let game = Application::new(assets_dir, Spybotics::new(), dispatcher)?;
-        // .build(dispatcher)?;
 
     game.run();
 
